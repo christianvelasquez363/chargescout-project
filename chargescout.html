@@ -12,6 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="ChargeScout">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
@@ -150,8 +152,14 @@
   .quick-action-btn:hover{ transform:translateY(-1px); }
 
   /* ---------- Map screen ---------- */
-  .map-canvas{ position:relative; margin:0 18px; border-radius:18px; overflow:hidden; background:var(--surface); aspect-ratio:9/12; }
-  .map-canvas svg{ width:100%; height:100%; display:block; }
+  .map-canvas{ position:relative; margin:0 18px; border-radius:18px; overflow:hidden; background:var(--surface); aspect-ratio:9/12; z-index:10; }
+  #leafletMap{ width:100%; height:100%; }
+  .leaflet-container{ background:var(--surface) !important; font-family:'Inter',sans-serif; }
+  .leaflet-control-attribution{ display:none; }
+  .station-marker{ width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; cursor:pointer; border:2px solid rgba(255,255,255,0.3); box-shadow:0 4px 12px rgba(0,0,0,0.35); }
+  .leaflet-popup-content-wrapper{ border-radius:14px !important; background:var(--surface) !important; border:1px solid var(--line) !important; box-shadow:0 10px 30px rgba(0,0,0,0.4) !important; }
+  .leaflet-popup-tip{ background:var(--surface) !important; }
+  .leaflet-popup-content{ font-size:12px; color:var(--text-hi); }
   .price-bubble{ cursor:pointer; }
   .price-bubble rect{ transition: filter .15s ease; }
   .price-bubble:active rect, .price-bubble:hover rect{ filter:brightness(1.15); }
@@ -472,21 +480,7 @@
         </button>
       </div>
       <div class="map-canvas">
-        <svg viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="0" width="300" height="400" fill="var(--surface)"/>
-          <g stroke="rgba(237,241,243,0.06)" stroke-width="2">
-            <line x1="0" y1="90" x2="300" y2="90"/>
-            <line x1="0" y1="200" x2="300" y2="200"/>
-            <line x1="0" y1="310" x2="300" y2="310"/>
-            <line x1="70" y1="0" x2="70" y2="400"/>
-            <line x1="160" y1="0" x2="160" y2="400"/>
-            <line x1="235" y1="0" x2="235" y2="400"/>
-          </g>
-          <path d="M -10 370 C 80 320, 200 350, 310 260" stroke="rgba(36,230,176,0.14)" stroke-width="9" fill="none"/>
-          <circle class="you-dot" cx="150" cy="205" r="6" fill="#5AB8FF"/>
-          <circle cx="150" cy="205" r="10" fill="none" stroke="#5AB8FF" stroke-width="1.5" opacity="0.4"/>
-          <g id="pinsLayer"></g>
-        </svg>
+        <div id="leafletMap"></div>
         <button class="fab" id="fabReport" title="Quick report"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span></button>
       </div>
       <div class="nearby-strip">
@@ -1139,28 +1133,103 @@ document.getElementById('quickAskAiBtn').addEventListener('click', ()=>{
   showToast('Ask for route or connector help');
 });
 
-/* ---------------- Map ---------------- */
-function renderMap(){
-  const mine = document.getElementById('mapConnectorFilter').value;
-  const layer = document.getElementById('pinsLayer');
-  layer.innerHTML = '';
-  stations.forEach(st=>{
-    const tier = priceTier(st.price);
-    const match = connectorMatch(st.connectors, mine);
-    const dim = mine && !match;
-    const label = formatPrice(st.price);
-    const w = 15 + label.length*6.5;
-    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
-    g.setAttribute('class', 'price-bubble' + (dim ? ' dim':''));
-    g.setAttribute('transform', `translate(${st.x - w/2},${st.y - 12})`);
-    g.innerHTML = `
-      <rect width="${w}" height="24" rx="12" fill="${tier.color}"/>
-      <text x="${w/2}" y="16" font-size="11" fill="#0B0F14" text-anchor="middle">${label}</text>
-    `;
-    g.addEventListener('click', ()=> openStationSheet(st.id));
-    layer.appendChild(g);
+/* ---------- Leaflet Map Initialization ---------- */
+let leafletMap = null;
+let userMarker = null;
+let stationMarkers = {};
+
+function createStationMarker(station){
+  const tier = priceTier(station.price);
+  const el = document.createElement('div');
+  el.className = 'station-marker';
+  el.style.backgroundColor = tier.bg;
+  el.style.color = tier.color;
+  el.innerHTML = formatPrice(station.price).slice(1,3);
+  
+  const marker = L.marker([station.lat, station.lng], {
+    icon: L.divIcon({ html: el.outerHTML, iconSize: [32, 32], className: '' })
   });
+  
+  marker.bindPopup(`
+    <div style="max-width:180px">
+      <div style="font-weight:700;font-size:13.5px;margin-bottom:4px;">${station.name}</div>
+      <div style="font-size:11px;color:var(--text-mid);margin-bottom:8px;">${station.address}</div>
+      <div style="font-weight:600;font-size:14px;margin-bottom:3px;">${formatPrice(station.price)} /kWh</div>
+      <div style="font-size:11px;color:var(--text-mid);margin-bottom:8px;">${station.network} · ${station.distance} mi</div>
+      <button onclick="openStationSheet('${station.id}'); document.querySelector('.leaflet-popup-close-button').click();" style="width:100%;padding:8px;background:var(--current);color:var(--ink);border:none;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer;">Details</button>
+    </div>
+  `);
+  
+  marker.on('click', ()=>{
+    openStationSheet(station.id);
+  });
+  
+  return marker;
 }
+
+function initLeafletMap(){
+  if(leafletMap) leafletMap.remove();
+  
+  const defaultCenter = [39.8283, -98.5795];
+  leafletMap = L.map('leafletMap', {
+    center: defaultCenter,
+    zoom: 4,
+    zoomControl: false,
+    attributionControl: false,
+    scrollWheelZoom: true
+  });
+  
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: ''
+  }).addTo(leafletMap);
+  
+  updateLeafletMarkers();
+  
+  if(currentLocation){
+    leafletMap.setView([currentLocation.lat, currentLocation.lng], 11);
+    addUserMarker();
+  }
+}
+
+function addUserMarker(){
+  if(!currentLocation || !leafletMap) return;
+  if(userMarker) userMarker.remove();
+  
+  userMarker = L.circleMarker([currentLocation.lat, currentLocation.lng], {
+    radius: 8,
+    color: '#5AB8FF',
+    fillColor: '#5AB8FF',
+    fillOpacity: 0.4,
+    weight: 2
+  }).addTo(leafletMap);
+}
+
+function updateLeafletMarkers(){
+  Object.values(stationMarkers).forEach(m => m.remove());
+  stationMarkers = {};
+  
+  const bounds = L.latLngBounds();
+  stations.forEach(st=>{
+    if(st.lat && st.lng){
+      const marker = createStationMarker(st);
+      marker.addTo(leafletMap);
+      stationMarkers[st.id] = marker;
+      bounds.extend([st.lat, st.lng]);
+    }
+  });
+  
+  if(stations.length > 0 && !currentLocation){
+    try{ leafletMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 11 }); }
+    catch(e){ console.log('Map bounds fitting skipped'); }
+  }
+}
+
+function renderMap(){
+  if(!leafletMap){ initLeafletMap(); }
+  else{ updateLeafletMarkers(); }
+}
+
 
 function renderNearby(){
   const sorted = [...stations].sort((a,b)=>{
@@ -1213,9 +1282,11 @@ document.getElementById('locateBtn').addEventListener('click', async ()=>{
     stations = stations.map(st=>({ ...st, distance: st.lat != null && st.lng != null ? Math.round(calculateDistanceMiles(currentLocation.lat, currentLocation.lng, st.lat, st.lng) * 10) / 10 : st.distance }));
     persistStations(stations);
     renderMap();
+    addUserMarker();
+    if(leafletMap) leafletMap.setView([currentLocation.lat, currentLocation.lng], 11);
     renderNearby();
     renderStationList();
-    showToast('Location updated');
+    showToast('📍 Your location found');
   }, ()=>{
     showToast('Location access denied — showing the nationwide demo list');
   }, { enableHighAccuracy: true, timeout: 8000 });
