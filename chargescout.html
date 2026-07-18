@@ -1,0 +1,1569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>ChargeScout — find your charge</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B0F14">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ChargeScout">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --ink:#0B0F14;
+    --surface:#141B22;
+    --surface-2:#1C2530;
+    --surface-3:#232E3B;
+    --line: rgba(237,241,243,0.09);
+    --text-hi:#EDF1F3;
+    --text-mid:#8FA0AC;
+    --current:#24E6B0;
+    --current-dim: rgba(36,230,176,0.14);
+    --copper:#E2833C;
+    --copper-dim: rgba(226,131,60,0.14);
+    --volt:#F5C84C;
+    --volt-dim: rgba(245,200,76,0.14);
+    --danger:#FF6B6B;
+    --radius: 16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:#05070A;
+    color:var(--text-hi);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:36px 16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background:var(--current); color:var(--ink); }
+  button{font-family:inherit; -webkit-tap-highlight-color:transparent;}
+  :focus-visible{ outline:2px solid var(--current); outline-offset:2px; border-radius:4px; }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
+
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+  .display{ font-family:'Space Grotesk', sans-serif; }
+
+  /* ---------- Phone frame ---------- */
+  .phone{
+    width:390px; height:830px; max-height:92vh;
+    background:var(--ink);
+    border-radius:46px;
+    border:9px solid #17181B;
+    box-shadow: 0 30px 70px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.03);
+    position:relative; overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+  .notch{
+    position:absolute; top:9px; left:50%; transform:translateX(-50%);
+    width:120px; height:26px; background:#17181B; border-radius:0 0 16px 16px; z-index:40;
+  }
+  .statusbar{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:14px 26px 4px; font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:600;
+    flex-shrink:0;
+  }
+  .statusbar .icons{ display:flex; gap:5px; align-items:center; }
+
+  /* ---------- App header (per-screen) ---------- */
+  .app-header{ padding:6px 18px 12px; flex-shrink:0; }
+  .header-row{ display:flex; align-items:center; gap:10px; }
+  .locpill{
+    display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--line);
+    padding:7px 12px; border-radius:999px; font-size:12.5px; color:var(--text-mid); flex:1; min-width:0;
+  }
+  .locpill b{ color:var(--text-hi); font-weight:600; }
+  .icon-btn{
+    width:36px; height:36px; border-radius:50%; background:var(--surface); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; position:relative;
+  }
+  .icon-btn .dot{
+    position:absolute; top:6px; right:6px; width:7px; height:7px; border-radius:50%; background:var(--copper);
+    border:1.5px solid var(--ink);
+  }
+  .icon-btn svg, .row-icon svg, .badge-icon svg, .fab-icon svg, .icon-inline, .status-icon, .assist-icon svg{
+    width:18px; height:18px; display:block; stroke:currentColor; fill:none; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round;
+  }
+  .icon-inline{ width:15px; height:15px; margin-right:6px; }
+  .status-icon{ width:15px; height:15px; display:inline-block; }
+  .locpill{ gap:8px; }
+  .icon-btn, .icon-btn svg, .row-icon, .row-icon svg, .badge-icon, .badge-icon svg, .fab-icon, .fab-icon svg, .icon-inline, .status-icon, .assist-icon, .assist-icon svg, .pill-select svg{
+    color:#fff;
+  }
+  .row-icon{ display:inline-flex; align-items:center; justify-content:center; }
+  .badge-icon{ display:inline-flex; align-items:center; justify-content:center; }
+  .points-pill{
+    display:flex; align-items:center; gap:6px; background:var(--volt-dim); border:1px solid rgba(245,200,76,0.3);
+    padding:6px 11px 6px 6px; border-radius:999px; flex-shrink:0;
+  }
+  .points-pill .av{ width:22px;height:22px;border-radius:50%; background:var(--volt); color:var(--ink);
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:10.5px; display:flex; align-items:center; justify-content:center; }
+  .points-pill span{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--volt); }
+
+  h1.pagetitle{ font-family:'Space Grotesk',sans-serif; font-size:21px; margin:10px 0 2px; letter-spacing:-0.01em; }
+  p.pagesub{ font-size:12.5px; color:var(--text-mid); margin:0 0 12px; }
+
+  /* ---------- Screens ---------- */
+  .screens{ flex:1; position:relative; overflow:hidden; }
+  .screen{
+    position:absolute; inset:0; overflow-y:auto; padding-bottom:110px;
+    display:none;
+  }
+  .screen.active{ display:block; animation:screenIn .22s ease; }
+  @keyframes screenIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .screen::-webkit-scrollbar{ display:none; }
+
+  /* ---------- Filter chips row ---------- */
+  .ev-profile-card{
+    margin:0 18px 12px; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:12px;
+  }
+  .ev-profile-card .ev-title{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-mid); margin-bottom:8px; }
+  .ev-profile-grid{ display:grid; grid-template-columns:1fr 1fr 0.8fr; gap:8px; margin-bottom:8px; }
+  .ev-profile-grid input{
+    width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text-hi); border-radius:10px;
+    padding:8px 9px; font-size:12px; font-family:'Inter',sans-serif;
+  }
+  .ev-profile-actions{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .ev-profile-summary{ font-size:11.5px; color:var(--text-mid); }
+  .ev-profile-btn{ border:none; background:var(--current); color:var(--ink); border-radius:10px; padding:8px 10px; font-size:12px; font-weight:700; cursor:pointer; }
+  .chiprow{ display:flex; gap:8px; padding:0 18px 12px; overflow-x:auto; }
+  .chiprow::-webkit-scrollbar{ display:none; }
+  select.pill-select{
+    appearance:none; background:var(--surface); border:1px solid var(--line); color:var(--text-hi);
+    border-radius:999px; padding:8px 14px; font-size:12.5px; white-space:nowrap; cursor:pointer;
+  }
+  .segctrl{ display:flex; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:3px; margin:0 18px 12px; }
+  .segctrl button{ flex:1; background:none; border:none; color:var(--text-mid); font-size:12px; padding:7px 8px; border-radius:999px; cursor:pointer; }
+  .segctrl button.on{ background:var(--current); color:var(--ink); font-weight:600; }
+
+  /* ---------- Map screen ---------- */
+  .map-canvas{ position:relative; margin:0 18px; border-radius:18px; overflow:hidden; background:var(--surface); aspect-ratio:9/12; }
+  .map-canvas svg{ width:100%; height:100%; display:block; }
+  .price-bubble{ cursor:pointer; }
+  .price-bubble rect{ transition: filter .15s ease; }
+  .price-bubble:active rect, .price-bubble:hover rect{ filter:brightness(1.15); }
+  .price-bubble.dim{ opacity:.3; }
+  .price-bubble text{ font-family:'IBM Plex Mono',monospace; font-weight:600; pointer-events:none; }
+  .you-dot{ animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
+
+  .fab{
+    position:absolute; right:14px; bottom:14px; z-index:20;
+    width:54px; height:54px; border-radius:50%; background:var(--current); color:var(--ink);
+    border:none; box-shadow:0 8px 20px rgba(36,230,176,0.35); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700;
+  }
+  .fab:hover{ filter:brightness(1.08); }
+
+  .nearby-strip{ padding:14px 18px 4px; }
+  .nearby-strip .label{ font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-mid); margin-bottom:8px; }
+  .nearby-cards{ display:flex; gap:10px; overflow-x:auto; padding-bottom:4px; }
+  .nearby-cards::-webkit-scrollbar{ display:none; }
+  .ncard{
+    flex-shrink:0; width:140px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px;
+    cursor:pointer;
+  }
+  .ncard .nn{ font-size:12.5px; font-weight:600; margin-bottom:2px; line-height:1.25; }
+  .ncard .nb{ font-size:10.5px; color:var(--text-mid); margin-bottom:8px; }
+  .ncard .npr{ font-family:'IBM Plex Mono',monospace; font-size:15px; }
+
+  /* ---------- Station list rows ---------- */
+  .slist{ padding:0 18px; }
+  .srow{
+    display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--line);
+    border-radius:16px; padding:12px; margin-bottom:10px; cursor:pointer;
+  }
+  .srow.incompatible{ opacity:.4; }
+  .srow .price-badge{
+    width:58px; height:58px; border-radius:14px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .srow .price-badge .p{ font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:600; }
+  .srow .price-badge .u{ font-size:9px; opacity:.75; }
+  .srow .info{ flex:1; min-width:0; }
+  .srow .info .n{ font-family:'Space Grotesk',sans-serif; font-size:14.5px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .srow .info .m{ font-size:11.5px; color:var(--text-mid); }
+  .srow .busy-mini{ display:flex; align-items:center; gap:5px; flex-shrink:0; }
+  .srow .busy-mini .meter{ width:26px; display:flex; gap:1.5px; }
+  .srow .busy-mini .meter i{ width:3px; height:14px; border-radius:1px; background:var(--surface-3); }
+  .srow .chevron{ color:var(--text-mid); flex-shrink:0; }
+
+  /* ---------- Community screen ---------- */
+  .station-chips{ display:flex; gap:8px; padding:0 18px 14px; overflow-x:auto; }
+  .station-chips::-webkit-scrollbar{ display:none; }
+  .schip{
+    flex-shrink:0; background:var(--surface); border:1px solid var(--line); color:var(--text-mid);
+    padding:8px 13px; border-radius:999px; font-size:12px; cursor:pointer; white-space:nowrap;
+  }
+  .schip.active{ background:var(--current-dim); border-color:var(--current); color:var(--current); }
+
+  .quickreport{
+    margin:0 18px 16px; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px;
+  }
+  .quickreport .qr-title{ font-size:12.5px; color:var(--text-mid); margin-bottom:10px; }
+  .typebtns{ display:flex; gap:6px; margin-bottom:10px; }
+  .typebtns button{
+    flex:1; background:var(--surface-2); border:1px solid var(--line); color:var(--text-mid);
+    padding:8px 4px; border-radius:10px; font-size:11px; cursor:pointer;
+  }
+  .typebtns button.on.traffic{ background:var(--copper-dim); border-color:var(--copper); color:var(--copper); }
+  .typebtns button.on.price{ background:var(--current-dim); border-color:var(--current); color:var(--current); }
+  .typebtns button.on.cleanliness{ background:var(--volt-dim); border-color:var(--volt); color:var(--volt); }
+  .quickreport textarea{
+    width:100%; min-height:52px; resize:none; background:var(--surface-2); border:1px solid var(--line);
+    color:var(--text-hi); border-radius:10px; padding:9px 11px; font-size:13px; font-family:'Inter',sans-serif; margin-bottom:10px;
+  }
+  .qr-submit{
+    width:100%; background:var(--current); color:var(--ink); border:none; border-radius:10px; padding:11px;
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; cursor:pointer;
+  }
+
+  .feedlist{ padding:0 18px; }
+  .report{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:13px 14px; margin-bottom:9px; }
+  .report-head{ display:flex; align-items:center; gap:7px; margin-bottom:6px; }
+  .report-type{ font-size:9.5px; padding:2px 7px; border-radius:6px; font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.03em; }
+  .report-type.traffic{ background:var(--copper-dim); color:var(--copper); }
+  .report-type.price{ background:var(--current-dim); color:var(--current); }
+  .report-type.cleanliness{ background:var(--volt-dim); color:var(--volt); }
+  .report-time{ font-size:11px; color:var(--text-mid); margin-left:auto; font-family:'IBM Plex Mono',monospace; }
+  .report-body{ font-size:13px; color:var(--text-hi); margin-bottom:6px; line-height:1.4; }
+  .upvote{ background:none; border:1px solid var(--line); color:var(--text-mid); border-radius:7px; padding:2px 8px; cursor:pointer; font-size:11.5px;}
+  .upvote:hover{ border-color:var(--current); color:var(--current); }
+
+  /* ---------- Rewards screen ---------- */
+  .hero-card{
+    margin:0 18px 16px; background:linear-gradient(150deg, var(--surface-3), var(--surface));
+    border:1px solid var(--line); border-radius:18px; padding:20px;
+  }
+  .hero-card .tn{ font-family:'Space Grotesk',sans-serif; font-size:22px; margin:2px 0 3px; }
+  .hero-card .tnext{ font-size:12px; color:var(--text-mid); margin-bottom:14px; }
+  .meter-row{ display:flex; align-items:center; gap:8px; }
+  .meter{ display:flex; gap:2.5px; flex:1; }
+  .meter i{ height:9px; flex:1; border-radius:2px; background:var(--surface-3); }
+  .meter-readout{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-mid); }
+
+  .earn-list{ margin:0 18px 16px; }
+  .earn-list .label{ font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-mid); margin-bottom:8px; }
+  .earn-row{
+    display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; padding:12px 14px; margin-bottom:8px;
+  }
+  .earn-row .ic{ width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:15px; }
+  .earn-row .et{ flex:1; font-size:13px; }
+  .earn-row .ep{ font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--volt); }
+
+  .invite-card, .badges-card, .sweepstakes-card{
+    margin:0 18px 16px; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px;
+  }
+  .invite-card .label, .badges-card .label, .sweepstakes-card .label{
+    font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-mid); margin-bottom:10px;
+  }
+  .invite-copy{ font-size:12.5px; color:var(--text-mid); line-height:1.5; margin-bottom:12px; }
+  .invite-copy b{ color:var(--text-hi); }
+  .code-row{ display:flex; gap:8px; margin-bottom:10px; }
+  .code-box{
+    flex:1; background:var(--surface-2); border:1px dashed var(--line); border-radius:10px;
+    padding:10px 12px; font-size:14px; letter-spacing:.06em; color:var(--current); display:flex; align-items:center;
+  }
+  .redeem-row{ display:flex; gap:8px; }
+  .redeem-row input{
+    flex:1; background:var(--surface-2); border:1px solid var(--line); color:var(--text-hi);
+    border-radius:10px; padding:10px 12px; font-size:12.5px; font-family:'Inter',sans-serif; min-width:0;
+  }
+  .btn.small{ padding:10px 14px; font-size:12.5px; flex:none; }
+
+  .badges-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+  .badge{
+    background:var(--surface-2); border:1px solid var(--line); border-radius:14px; padding:12px 8px;
+    text-align:center; opacity:.4; filter:grayscale(.6);
+  }
+  .badge.unlocked{ opacity:1; filter:none; border-color:rgba(36,230,176,0.35); background:var(--current-dim); }
+  .badge .bic{ font-size:22px; margin-bottom:6px; }
+  .badge .bname{ font-size:11px; font-weight:600; margin-bottom:2px; }
+  .badge .bdesc{ font-size:9.5px; color:var(--text-mid); line-height:1.3; }
+
+  .sweep-prize{ font-family:'Space Grotesk',sans-serif; font-size:16px; margin-bottom:4px; }
+  .sweep-sub{ font-size:12px; color:var(--text-mid); margin-bottom:12px; line-height:1.4; }
+  .sweep-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .sweep-entries{ font-size:13px; color:var(--text-mid); }
+  .sweep-entries b{ color:var(--volt); font-size:14px; }
+
+  .board-card{ margin:0 18px 16px; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:6px 14px; }
+  .board-row{ display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); font-size:13px; }
+  .board-row:last-child{ border-bottom:none; }
+  .board-row .rank{ font-family:'IBM Plex Mono',monospace; color:var(--text-mid); width:18px; }
+  .board-row .name{ flex:1; }
+  .board-row.you{ color:var(--current); }
+  .board-row .bpts{ font-family:'IBM Plex Mono',monospace; }
+
+  /* ---------- Bottom sheet ---------- */
+  .sheet-backdrop{
+    position:absolute; inset:0; background:rgba(0,0,0,0.5); z-index:50; opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .sheet-backdrop.show{ opacity:1; pointer-events:auto; }
+  .bottom-sheet{
+    position:absolute; left:0; right:0; bottom:0; z-index:51; background:var(--surface);
+    border-radius:22px 22px 0 0; border:1px solid var(--line); border-bottom:none;
+    padding:10px 20px 24px; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
+    max-height:80%; overflow-y:auto;
+  }
+  .bottom-sheet.show{ transform:translateY(0); }
+  .sheet-handle{ width:36px; height:4px; background:var(--surface-3); border-radius:2px; margin:0 auto 14px; }
+  .sheet-network{ display:inline-block; font-size:11px; padding:3px 8px; border-radius:6px; background:var(--surface-2); color:var(--text-mid); margin-bottom:8px; }
+  .sheet-name{ font-family:'Space Grotesk',sans-serif; font-size:18px; margin:0 0 3px; }
+  .sheet-addr{ font-size:12.5px; color:var(--text-mid); margin-bottom:14px; }
+  .sheet-price-line{ display:flex; align-items:baseline; gap:6px; margin-bottom:16px; }
+  .sheet-price-line .amt{ font-family:'IBM Plex Mono',monospace; font-size:25px; font-weight:600; }
+  .sheet-price-line .unit{ font-size:12px; color:var(--text-mid); }
+  .sheet-tier{ font-size:11px; padding:2px 8px; border-radius:20px; margin-left:auto; font-family:'IBM Plex Mono',monospace; }
+  .sheet-block{ margin-bottom:15px; }
+  .sheet-block .lbl{ font-size:11px; color:var(--text-mid); text-transform:uppercase; letter-spacing:.04em; margin-bottom:7px; }
+  .connector-list{ display:flex; gap:6px; flex-wrap:wrap; }
+  .connector-pill{ font-size:11.5px; padding:4px 9px; border-radius:7px; font-family:'IBM Plex Mono',monospace; background:var(--surface-2); border:1px solid var(--line); }
+  .connector-pill.match{ border-color:var(--current); color:var(--current); }
+  .sheet-amenities{ font-size:13px; color:var(--text-mid); }
+  .sheet-actions{ display:flex; gap:8px; margin-top:6px; }
+  .btn{ border:none; border-radius:11px; padding:12px 14px; font-size:13.5px; cursor:pointer; font-family:'Space Grotesk',sans-serif; font-weight:600; color:var(--ink); background:var(--current); flex:1; }
+  .btn.secondary{ background:var(--surface-2); color:var(--text-hi); border:1px solid var(--line); }
+
+  /* ---------- Bottom tab nav ---------- */
+  .bottom-nav{
+    position:relative; z-index:30; display:flex; background:rgba(20,27,34,0.92); backdrop-filter:blur(10px);
+    border-top:1px solid var(--line); padding:9px 6px calc(env(safe-area-inset-bottom,0px) + 9px);
+    flex-shrink:0;
+  }
+  .bottom-nav button{
+    flex:1; background:none; border:none; color:var(--text-mid); display:flex; flex-direction:column; align-items:center;
+    gap:3px; font-size:10px; padding:4px 0; cursor:pointer; font-family:'Space Grotesk',sans-serif;
+  }
+  .bottom-nav button svg{ width:22px; height:22px; }
+  .bottom-nav button.active{ color:var(--current); }
+
+  .toast{
+    position:absolute; bottom:96px; left:50%; transform:translateX(-50%) translateY(10px); z-index:60;
+    background:var(--current); color:var(--ink); padding:10px 18px; border-radius:999px;
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:12.5px;
+    opacity:0; pointer-events:none; transition:all .25s ease; white-space:nowrap;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .assistant-panel{
+    position:absolute; inset:0; z-index:70; background:rgba(5,7,10,0.72); display:flex; align-items:flex-end; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .assistant-panel.show{ opacity:1; pointer-events:auto; }
+  .assistant-card{
+    width:100%; max-width:100%; margin:14px 14px 92px; background:var(--surface); border:1px solid var(--line);
+    border-radius:22px; padding:14px; box-shadow:0 20px 50px rgba(0,0,0,0.35);
+  }
+  .assistant-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+  .assistant-title{ font-family:'Space Grotesk',sans-serif; font-size:16px; }
+  .assist-close{ background:none; border:none; color:var(--text-mid); font-size:18px; cursor:pointer; }
+  .assistant-copy{ font-size:12px; color:var(--text-mid); margin-bottom:10px; line-height:1.4; }
+  .assistant-msgs{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow:auto; margin-bottom:10px; }
+  .assistant-bubble{ padding:9px 10px; border-radius:12px; font-size:12.5px; line-height:1.4; max-width:92%; }
+  .assistant-bubble.user{ background:var(--current-dim); color:var(--current); align-self:flex-end; }
+  .assistant-bubble.ai{ background:var(--surface-2); color:var(--text-hi); align-self:flex-start; }
+  .assist-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .assist-chip{ border:1px solid var(--line); background:var(--surface-2); color:var(--text-hi); border-radius:999px; padding:7px 10px; font-size:11.5px; cursor:pointer; }
+  .assistant-input-row{ display:flex; gap:8px; }
+  .assistant-input-row input{ flex:1; border:1px solid var(--line); background:var(--surface-2); color:var(--text-hi); border-radius:10px; padding:10px 11px; font-size:12.5px; }
+  .assistant-input-row button{ border:none; background:var(--current); color:var(--ink); border-radius:10px; padding:10px 12px; font-weight:700; cursor:pointer; }
+
+  .credit{ color:var(--text-mid); font-size:11.5px; text-align:center; margin-top:18px; }
+  .install-banner{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    margin:0 18px 12px; padding:12px 13px; border-radius:14px;
+    background:linear-gradient(135deg, rgba(36,230,176,0.2), rgba(36,230,176,0.08));
+    border:1px solid rgba(36,230,176,0.28);
+  }
+  .install-banner[hidden]{ display:none; }
+  .install-banner .install-title{ font-size:12px; font-weight:700; color:var(--current); margin-bottom:2px; }
+  .install-banner .install-copy{ font-size:11.5px; color:var(--text-mid); line-height:1.35; }
+  .install-banner button{ border:none; background:var(--current); color:var(--ink); border-radius:10px; padding:8px 10px; font-size:12px; font-weight:700; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="notch"></div>
+  <div class="statusbar">
+    <span>9:41</span>
+    <div class="icons">
+      <span><svg class="status-icon" viewBox="0 0 24 24"><path d="M4 16v2"></path><path d="M8 14v4"></path><path d="M12 11v7"></path><path d="M16 8v10"></path><path d="M20 4v14"></path></svg></span>
+      <span><svg class="status-icon" viewBox="0 0 24 24"><path d="M4 14h2"></path><path d="M8 12h2"></path><path d="M12 10h2"></path><path d="M16 8h2"></path><path d="M20 6h2"></path></svg></span>
+      <span><svg class="status-icon" viewBox="0 0 24 24"><path d="M6 16h12"></path><path d="M8 16v-4"></path><path d="M12 16v-7"></path><path d="M16 16v-2"></path></svg></span>
+    </div>
+  </div>
+
+  <div class="screens">
+    <div class="install-banner" id="installBanner" hidden>
+      <div>
+        <div class="install-title">Install ChargeScout</div>
+        <div class="install-copy">Save it to your home screen and use it like a native app across the USA.</div>
+      </div>
+      <button id="installBannerBtn">Install</button>
+    </div>
+
+    <!-- MAP SCREEN -->
+    <div class="screen active" id="screen-map">
+      <div class="app-header">
+        <div class="header-row">
+          <div class="locpill" id="locationPill">
+            <svg class="icon-inline" viewBox="0 0 24 24"><path d="M12 21s6-6 6-10a6 6 0 1 0-12 0c0 4 6 10 6 10Z"></path><circle cx="12" cy="11" r="2.5"></circle></svg>
+            <b>Loading your region…</b>
+            <span>· 0 stations nearby</span>
+          </div>
+          <button class="icon-btn" id="locateBtn" title="Use my location"><svg viewBox="0 0 24 24"><path d="M12 4v3"></path><path d="M12 17v3"></path><path d="M4 12h3"></path><path d="M17 12h3"></path><circle cx="12" cy="12" r="3.2"></circle></svg></button>
+          <button class="icon-btn" id="installBtn" title="Install app"><svg viewBox="0 0 24 24"><path d="M12 4v11"></path><path d="m8 11 4 4 4-4"></path><path d="M6 19h12"></path></svg></button>
+          <button class="icon-btn" id="aiBtn" title="Ask ChargeScout AI"><svg viewBox="0 0 24 24"><path d="M12 4v3"></path><path d="M12 17v3"></path><path d="M5 8l2 2"></path><path d="M17 16l2 2"></path><path d="M5 16l2-2"></path><path d="M17 8l2-2"></path><circle cx="12" cy="12" r="3.5"></circle></svg></button>
+          <button class="icon-btn" id="notifBtn"><svg viewBox="0 0 24 24"><path d="M10 5a2 2 0 0 1 4 0"></path><path d="M8 8h8"></path><path d="M7 8a2 2 0 0 0-2 2v2a4 4 0 0 0 1 2.5L7 16h10l1-1.5A4 4 0 0 0 19 12V10a2 2 0 0 0-2-2"></path><path d="M10 18a2 2 0 0 0 4 0"></path></svg><span class="dot"></span></button>
+        </div>
+      </div>
+      <div class="ev-profile-card">
+        <div class="ev-title">Your EV profile</div>
+        <div class="ev-profile-grid">
+          <input id="evMakeInput" placeholder="Make" />
+          <input id="evModelInput" placeholder="Model" />
+          <input id="evYearInput" placeholder="Year" />
+        </div>
+        <div class="ev-profile-actions">
+          <div class="ev-profile-summary" id="evProfileSummary">Add your EV to personalize station suggestions.</div>
+          <button class="ev-profile-btn" id="saveEvProfileBtn">Save</button>
+        </div>
+      </div>
+      <div class="chiprow">
+        <select class="pill-select" id="mapConnectorFilter">
+          <option value="">My connector: all</option>
+          <option value="CCS">CCS</option>
+          <option value="CHAdeMO">CHAdeMO</option>
+          <option value="NACS">NACS (Tesla)</option>
+          <option value="J1772">J1772</option>
+        </select>
+        <button class="pill-select" id="refreshStationsBtn" style="cursor:pointer;"><svg class="icon-inline" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"></path><path d="M20 4v4h-4"></path></svg>Refresh stations</button>
+      </div>
+      <div class="map-canvas">
+        <svg viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="300" height="400" fill="var(--surface)"/>
+          <g stroke="rgba(237,241,243,0.06)" stroke-width="2">
+            <line x1="0" y1="90" x2="300" y2="90"/>
+            <line x1="0" y1="200" x2="300" y2="200"/>
+            <line x1="0" y1="310" x2="300" y2="310"/>
+            <line x1="70" y1="0" x2="70" y2="400"/>
+            <line x1="160" y1="0" x2="160" y2="400"/>
+            <line x1="235" y1="0" x2="235" y2="400"/>
+          </g>
+          <path d="M -10 370 C 80 320, 200 350, 310 260" stroke="rgba(36,230,176,0.14)" stroke-width="9" fill="none"/>
+          <circle class="you-dot" cx="150" cy="205" r="6" fill="#5AB8FF"/>
+          <circle cx="150" cy="205" r="10" fill="none" stroke="#5AB8FF" stroke-width="1.5" opacity="0.4"/>
+          <g id="pinsLayer"></g>
+        </svg>
+        <button class="fab" id="fabReport" title="Quick report"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span></button>
+      </div>
+      <div class="nearby-strip">
+        <div class="label">Cheapest near you</div>
+        <div class="nearby-cards" id="nearbyCards"></div>
+      </div>
+    </div>
+
+    <!-- STATIONS SCREEN -->
+    <div class="screen" id="screen-stations">
+      <div class="app-header">
+        <h1 class="pagetitle">Stations</h1>
+        <p class="pagesub">Sorted for your connector and your wallet</p>
+      </div>
+      <div class="chiprow">
+        <select class="pill-select" id="listConnectorFilter">
+          <option value="">My connector: all</option>
+          <option value="CCS">CCS</option>
+          <option value="CHAdeMO">CHAdeMO</option>
+          <option value="NACS">NACS (Tesla)</option>
+          <option value="J1772">J1772</option>
+        </select>
+      </div>
+      <div class="segctrl" id="sortCtrl">
+        <button data-sort="price" class="on">Price</button>
+        <button data-sort="busy">Busy now</button>
+        <button data-sort="distance">Distance</button>
+      </div>
+      <div class="slist" id="stationList"></div>
+    </div>
+
+    <!-- COMMUNITY SCREEN -->
+    <div class="screen" id="screen-community">
+      <div class="app-header">
+        <h1 class="pagetitle">Community</h1>
+        <p class="pagesub" id="communitySub">Live reports from other drivers</p>
+      </div>
+      <div class="station-chips" id="stationChips"></div>
+      <div class="quickreport">
+        <div class="qr-title">Report what you're seeing right now</div>
+        <div class="typebtns" id="typeBtns">
+          <button data-type="traffic" class="on traffic">Traffic</button>
+          <button data-type="price" class="price">Price</button>
+          <button data-type="cleanliness" class="cleanliness">Cleanliness</button>
+        </div>
+        <textarea id="reportText" placeholder="e.g. 2 stalls open, price is now $0.44/kWh"></textarea>
+        <button class="qr-submit" id="submitReport">Post report · +5 pts</button>
+      </div>
+      <div class="feedlist" id="reportFeed"></div>
+    </div>
+
+    <!-- REWARDS SCREEN -->
+    <div class="screen" id="screen-rewards">
+      <div class="app-header">
+        <h1 class="pagetitle">Rewards</h1>
+        <p class="pagesub">Earn points every time you help other drivers</p>
+      </div>
+      <div class="hero-card">
+        <div class="lbl" style="font-size:11px;color:var(--text-mid);text-transform:uppercase;letter-spacing:.04em;">Your tier</div>
+        <div class="tn" id="rTierName">Scout</div>
+        <div class="tnext" id="rTierNext"></div>
+        <div class="meter-row">
+          <div class="meter" id="rTierMeter"></div>
+          <div class="meter-readout mono" id="rTierPts">85</div>
+        </div>
+      </div>
+      <div class="earn-list">
+        <div class="label">Ways to earn</div>
+        <div class="earn-row"><div class="ic" style="background:var(--copper-dim)"><span class="row-icon"><svg viewBox="0 0 24 24"><path d="M6 8h12"></path><path d="M6 12h12"></path><path d="M8 16h8"></path><path d="M8 5h8"></path><path d="M8 20h8"></path></svg></span></div><div class="et">Report traffic or wait time</div><div class="ep">+5 pts</div></div>
+        <div class="earn-row"><div class="ic" style="background:var(--current-dim)"><span class="row-icon"><svg viewBox="0 0 24 24"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></div><div class="et">Report a price update</div><div class="ep">+5 pts</div></div>
+        <div class="earn-row"><div class="ic" style="background:var(--volt-dim)"><span class="row-icon"><svg viewBox="0 0 24 24"><path d="M12 4l1.8 5.2L19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8L12 4Z"></path></svg></span></div><div class="et">Rate station cleanliness</div><div class="ep">+5 pts</div></div>
+        <div class="earn-row"><div class="ic" style="background:var(--surface-3)"><span class="row-icon"><svg viewBox="0 0 24 24"><path d="M7 7h10"></path><path d="M7 12h10"></path><path d="M7 17h6"></path></svg></span></div><div class="et">Get your report upvoted</div><div class="ep">+1 pt</div></div>
+        <div class="earn-row"><div class="ic" style="background:var(--volt-dim)"><span class="row-icon"><svg viewBox="0 0 24 24"><path d="M5 12h14"></path><path d="M12 5v14"></path><path d="M8 8l8 8"></path><path d="M16 8l-8 8"></path></svg></span></div><div class="et">Friend joins with your code</div><div class="ep">+5 pts</div></div>
+        <div class="earn-row"><div class="ic" style="background:var(--current-dim)"><span class="row-icon"><svg viewBox="0 0 24 24"><path d="M8 7h8"></path><path d="M8 12h8"></path><path d="M8 17h5"></path></svg></span></div><div class="et">Referred friend posts first report</div><div class="ep">+25 pts</div></div>
+      </div>
+
+      <div class="invite-card">
+        <div class="label">Invite friends</div>
+        <div class="invite-body">
+          <div class="invite-copy">Share your code. You get <b>+5 pts</b> when they join, and <b>+25 pts</b> once they post their first report.</div>
+          <div class="code-row">
+            <div class="code-box mono" id="referralCode">CHRIS-SCOUT83</div>
+            <button class="btn secondary small" id="copyCodeBtn">Copy</button>
+          </div>
+          <div class="redeem-row">
+            <input type="text" id="friendCodeInput" placeholder="Have a friend's code? Enter it">
+            <button class="btn small" id="applyCodeBtn">Apply</button>
+          </div>
+          <button class="btn secondary small" id="simulateReferralBtn" style="width:100%;margin-top:8px;">How do I earn the +25 pts?</button>
+        </div>
+      </div>
+
+      <div class="badges-card">
+        <div class="label">Badges</div>
+        <div class="badges-grid" id="badgesGrid"></div>
+      </div>
+
+      <div class="sweepstakes-card">
+        <div class="label">This month's drawing</div>
+        <div class="sweep-prize"><span class="row-icon" style="display:inline-flex; margin-right:6px;"><svg viewBox="0 0 24 24"><path d="M13 2 6 13h5l-1 9 7-11h-5l1-9Z"></path></svg></span>$100 charging credit</div>
+        <div class="sweep-sub">Redeem 50 pts for +1 entry. Winner announced monthly.</div>
+        <div class="sweep-row">
+          <div class="sweep-entries">Your entries: <b class="mono" id="sweepEntries">0</b></div>
+          <button class="btn small" id="redeemEntryBtn">Redeem 50 pts</button>
+        </div>
+      </div>
+
+      <div class="board-card">
+        <div class="label" style="padding-top:10px;">Leaderboard — top scouts</div>
+        <div id="leaderboard"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM SHEET -->
+  <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div class="bottom-sheet" id="bottomSheet"></div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="assistant-panel" id="assistantPanel">
+    <div class="assistant-card">
+      <div class="assistant-head">
+        <div class="assistant-title">ChargeScout AI</div>
+        <button class="assist-close" id="assistantCloseBtn" title="Close">×</button>
+      </div>
+      <div class="assistant-copy">Ask for the cheapest station, the best connector fit, or a smarter stop for your route.</div>
+      <div class="assist-chips">
+        <button class="assist-chip" data-ai-action="cheapest">Cheapest nearby</button>
+        <button class="assist-chip" data-ai-action="connector">Best for my connector</button>
+        <button class="assist-chip" data-ai-action="trip">Plan my route</button>
+      </div>
+      <div class="assistant-msgs" id="assistantMsgs"></div>
+      <div class="assistant-input-row">
+        <input id="assistantInput" placeholder="Ask ChargeScout AI…" />
+        <button id="assistantSendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <div class="bottom-nav">
+    <button data-view="map" class="active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>
+      Map
+    </button>
+    <button data-view="stations">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      Stations
+    </button>
+    <button data-view="community">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-8.9 8.4A8.6 8.6 0 0 1 3 11.5 8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></svg>
+      Community
+    </button>
+    <button data-view="rewards">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a1 1 0 0 0-1 1c0 2.5 1.5 4 4 4M17 5h3a1 1 0 0 1 1 1c0 2.5-1.5 4-4 4"/></svg>
+      Rewards
+    </button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   SUPABASE CONFIG — replace with your project's values
+   (Supabase dashboard -> Settings -> API)
+   ============================================================ */
+const SUPABASE_URL = 'https://oyqqqsrbvilsnwfyfjle.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ImAbf7yxRopTmqKEEtreBA_hQ2OhoIp';
+const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+const STORAGE_KEYS = {
+  profile: 'chargescout.profile',
+  reports: 'chargescout.reports',
+  stations: 'chargescout.stations'
+};
+
+let usingFallbackData = false;
+let currentLocation = null;
+let installPromptEvent = null;
+let evProfile = readStoredJSON('chargescout.ev-profile', { make:'', model:'', year:'', connector:'' });
+
+const FALLBACK_STATIONS = [
+  { id: 'demo-la', name: 'Los Angeles Fast Hub', network: 'ChargeGrid', address: '900 W Olympic Blvd, Los Angeles, CA', lat: 34.0469, lng: -118.2673, price: 0.39, connectors: ['CCS', 'NACS'], amenities: ['Restrooms', 'Cafe'] },
+  { id: 'demo-sf', name: 'Bayview Charge Point', network: 'Volta', address: '1001 4th St, San Francisco, CA', lat: 37.7749, lng: -122.4194, price: 0.42, connectors: ['CCS', 'J1772'], amenities: ['Wi-Fi', 'Coffee'] },
+  { id: 'demo-den', name: 'Front Range Supercharge', network: 'EVGo', address: '1801 Blake St, Denver, CO', lat: 39.7420, lng: -104.9925, price: 0.37, connectors: ['CCS', 'CHAdeMO'], amenities: ['Restrooms', 'Parking'] },
+  { id: 'demo-dal', name: 'North Dallas Station', network: 'ChargePoint', address: '5100 Main St, Dallas, TX', lat: 32.7767, lng: -96.7970, price: 0.41, connectors: ['CCS', 'NACS', 'J1772'], amenities: ['Restrooms', 'Lounge'] },
+  { id: 'demo-chi', name: 'Loop Charge Plaza', network: 'Blink', address: '100 S Michigan Ave, Chicago, IL', lat: 41.8781, lng: -87.6298, price: 0.40, connectors: ['CCS', 'J1772'], amenities: ['Wi-Fi', 'Cafe'] },
+  { id: 'demo-atl', name: 'Midtown EV Hub', network: 'ChargePoint', address: '100 Peachtree St, Atlanta, GA', lat: 33.7490, lng: -84.3880, price: 0.38, connectors: ['CCS', 'NACS'], amenities: ['Restrooms', 'Food'] },
+  { id: 'demo-nyc', name: 'Hudson Street Charge', network: 'EVBox', address: '1 Hudson St, New York, NY', lat: 40.7153, lng: -74.0088, price: 0.44, connectors: ['CCS', 'J1772'], amenities: ['Wi-Fi', 'Security'] },
+  { id: 'demo-mia', name: 'South Beach Charge', network: 'ChargeGrid', address: '1200 Collins Ave, Miami, FL', lat: 25.7617, lng: -80.1918, price: 0.36, connectors: ['CCS', 'NACS'], amenities: ['Restrooms', 'Cafe'] },
+  { id: 'demo-phx', name: 'Desert Charge Point', network: 'EVGo', address: '1001 N Central Ave, Phoenix, AZ', lat: 33.4484, lng: -112.0740, price: 0.35, connectors: ['CCS', 'CHAdeMO'], amenities: ['Parking', 'Coffee'] },
+  { id: 'demo-sea', name: 'Seattle Waterfront Charge', network: 'Volta', address: '200 Pike St, Seattle, WA', lat: 47.6062, lng: -122.3321, price: 0.43, connectors: ['CCS', 'J1772'], amenities: ['Restrooms', 'Water'] }
+];
+
+function readStoredJSON(key, fallback){
+  try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }catch(e){ console.warn('Could not read storage', e); return fallback; }
+}
+function writeStoredJSON(key, value){
+  try{ localStorage.setItem(key, JSON.stringify(value)); }catch(e){ console.warn('Could not write storage', e); }
+}
+function createLocalProfile(){
+  return {
+    id: 'local-user',
+    points: 85,
+    referral_code: 'SCOUT' + Math.random().toString(36).slice(2, 6).toUpperCase(),
+    referred_by: null,
+    sweepstakes_entries: 0,
+    referral_bonus_claimed: false
+  };
+}
+function persistProfile(profile){
+  myProfile = profile;
+  writeStoredJSON(STORAGE_KEYS.profile, profile);
+}
+function persistStations(stationList){
+  writeStoredJSON(STORAGE_KEYS.stations, stationList);
+}
+function persistReports(reportList){
+  writeStoredJSON(STORAGE_KEYS.reports, reportList);
+}
+function calculateDistanceMiles(lat1, lng1, lat2, lng2){
+  return haversineMiles(lat1, lng1, lat2, lng2);
+}
+function buildStationObjects(rows){
+  const lats = rows.map(r=>r.lat).filter(v=>v!=null);
+  const lngs = rows.map(r=>r.lng).filter(v=>v!=null);
+  const hasCoords = lats.length > 0;
+  const latMin = hasCoords ? Math.min(...lats) : 0, latMax = hasCoords ? Math.max(...lats) : 1;
+  const lngMin = hasCoords ? Math.min(...lngs) : 0, lngMax = hasCoords ? Math.max(...lngs) : 1;
+  const PAD = 30, W = 300, H = 400;
+  function normX(lng){ if(lngMax===lngMin) return W/2; return PAD + (lng-lngMin)/(lngMax-lngMin) * (W-2*PAD); }
+  function normY(lat){ if(latMax===latMin) return H/2; return H - (PAD + (lat-latMin)/(latMax-latMin) * (H-2*PAD)); }
+  return rows.map(row => ({
+    id: row.id, name: row.name, network: row.network, address: row.address,
+    lat: row.lat != null ? Number(row.lat) : null,
+    lng: row.lng != null ? Number(row.lng) : null,
+    x: (row.lat!=null && row.lng!=null) ? normX(row.lng) : (row.map_x ?? W/2),
+    y: (row.lat!=null && row.lng!=null) ? normY(row.lat) : (row.map_y ?? H/2),
+    price: row.price == null ? null : Number(row.price),
+    connectors: row.connectors || [], amenities: row.amenities || [],
+    distance: row.distance_mi != null ? Number(row.distance_mi) : (row.lat != null && row.lng != null && currentLocation ? Math.round(calculateDistanceMiles(currentLocation.lat, currentLocation.lng, row.lat, row.lng) * 10) / 10 : 0),
+    busy: busyCurve(...hashSeed(row.id))
+  }));
+}
+function seedFallbackStations(){
+  usingFallbackData = true;
+  const seeded = buildStationObjects(FALLBACK_STATIONS.map(st=>({...st, price: st.price, connectors: st.connectors, amenities: st.amenities})));
+  persistStations(seeded);
+  return seeded;
+}
+
+/* ============================================================
+   OPEN CHARGE MAP CONFIG — free public EV charging station data
+   Get a free key at https://openchargemap.org/site/loginprovider
+   (optional — works without one at a lower rate limit)
+   ============================================================ */
+const OCM_API_KEY = '';                                  // optional
+const OCM_CENTER = { lat: 34.0901, lng: -117.8703 };      // Covina, CA
+const OCM_RADIUS_MILES = 15;
+const OCM_MAX_RESULTS = 40;
+
+/* ---------------- Local state (populated from Supabase) ---------------- */
+function busyCurve(peakShift, base){
+  const arr = [];
+  for(let h=0; h<24; h++){
+    const morning = 70*Math.exp(-Math.pow(h-(8+peakShift),2)/6);
+    const evening = 85*Math.exp(-Math.pow(h-(18+peakShift),2)/7);
+    arr.push(Math.min(100, Math.round(base + morning + evening)));
+  }
+  return arr;
+}
+// Deterministic per-station busy-hour curve, derived from the station id,
+// until real utilization data is tracked. Works for any number of stations.
+function hashSeed(id){
+  let h = 0;
+  for(let i=0;i<id.length;i++){ h = (h*31 + id.charCodeAt(i)) | 0; }
+  const peakShift = (Math.abs(h) % 5) - 2;      // -2..2
+  const base = 3 + (Math.abs(h >> 3) % 12);     // 3..14
+  return [peakShift, base];
+}
+
+let stations = [];
+let reports = [];
+let leaderboard = [];
+let myProfile = null;      // { id, points, referral_code, referred_by, sweepstakes_entries }
+let myReportCount = 0;
+let myReferralsCount = 0;
+
+const tiers = [
+  { name:'Scout', min:0 },
+  { name:'Volt Rider', min:100 },
+  { name:'Fast Charger', min:250 },
+  { name:'Grid Champion', min:500 },
+];
+
+let youPoints = 0;
+let selectedStationId = null;
+let communityStationId = null;
+let activeReportType = 'traffic';
+let sweepEntries = 0;
+
+const badgeDefs = [
+  { id:'first-report', icon:'<svg class="badge-icon" viewBox="0 0 24 24"><path d="M7 4h8l3 3v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"></path><path d="M10 8h4"></path><path d="M10 12h4"></path><path d="M10 16h2"></path></svg>', name:'First Report', desc:'Post 1 report', check: () => myReportCount >= 1 },
+  { id:'road-warrior', icon:'<svg class="badge-icon" viewBox="0 0 24 24"><path d="M5 6h14"></path><path d="M7 6v11"></path><path d="M17 6v11"></path><path d="M7 17h10"></path><path d="M8 9h8"></path></svg>', name:'Road Warrior', desc:'Post 10 reports', check: () => myReportCount >= 10 },
+  { id:'recruiter', icon:'<svg class="badge-icon" viewBox="0 0 24 24"><path d="M8 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path><path d="M16 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path><path d="M7 12h10"></path><path d="M7 16h10"></path><path d="M6 20h12"></path></svg>', name:'Recruiter', desc:'Refer 1 friend', check: () => myReferralsCount >= 1 },
+  { id:'networker', icon:'<svg class="badge-icon" viewBox="0 0 24 24"><path d="M6 14a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path><path d="M18 14a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path><path d="M6 12v3"></path><path d="M18 12v3"></path><path d="M9 18a3 3 0 0 0 6 0"></path></svg>', name:'Networker', desc:'Refer 5 friends', check: () => myReferralsCount >= 5 },
+  { id:'volt-rider', icon:'<svg class="badge-icon" viewBox="0 0 24 24"><path d="M13 2 6 13h5l-1 9 7-11h-5l1-9Z"></path></svg>', name:'Volt Rider', desc:'Reach 100 pts', check: () => youPoints >= 100 },
+  { id:'grid-champion', icon:'<svg class="badge-icon" viewBox="0 0 24 24"><path d="M12 3 6 8v4l6 5 6-5V8l-6-5Z"></path><path d="M8 10h8"></path></svg>', name:'Grid Champion', desc:'Reach 500 pts', check: () => youPoints >= 500 },
+];
+
+/* ---------------- Open Charge Map sync ---------------- */
+// Maps Open Charge Map's verbose connection-type names to our short codes.
+function mapConnectorName(title){
+  const t = (title || '').toLowerCase();
+  if(t.includes('ccs') || t.includes('combined charging')) return 'CCS';
+  if(t.includes('chademo')) return 'CHAdeMO';
+  if(t.includes('tesla') || t.includes('nacs')) return 'NACS';
+  if(t.includes('j1772') || t.includes('type 1') || t.includes('type1')) return 'J1772';
+  return null; // unrecognized connector type — skip rather than show noise
+}
+
+function haversineMiles(lat1, lng1, lat2, lng2){
+  const R = 3958.8;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function syncFromOpenChargeMap(){
+  const params = new URLSearchParams({
+    output: 'json', countrycode: 'US', compact: 'true', verbose: 'false',
+    latitude: OCM_CENTER.lat, longitude: OCM_CENTER.lng,
+    distance: OCM_RADIUS_MILES, distanceunit: 'Miles', maxresults: OCM_MAX_RESULTS
+  });
+  if(OCM_API_KEY) params.set('key', OCM_API_KEY);
+
+  let data;
+  try{
+    const res = await fetch('https://api.openchargemap.io/v3/poi/?' + params.toString());
+    data = await res.json();
+  }catch(e){
+    console.error('Open Charge Map fetch failed', e);
+    showToast('Could not reach Open Charge Map — showing saved stations');
+    return false;
+  }
+
+  const rows = data.map(poi => {
+    const addr = poi.AddressInfo || {};
+    if(addr.Latitude == null || addr.Longitude == null) return null;
+    const connectors = [...new Set((poi.Connections || [])
+      .map(c => mapConnectorName(c.ConnectionType && c.ConnectionType.Title))
+      .filter(Boolean))];
+    if(connectors.length === 0) return null; // skip stations with no connector we recognize
+    return {
+      id: 'ocm-' + poi.ID,
+      name: addr.Title || 'Unnamed station',
+      network: (poi.OperatorInfo && poi.OperatorInfo.Title) || 'Independent',
+      address: [addr.AddressLine1, addr.Town, addr.StateOrProvince].filter(Boolean).join(', '),
+      lat: addr.Latitude, lng: addr.Longitude,
+      price: null, // Open Charge Map rarely has structured pricing — community reports fill this in
+      connectors,
+      amenities: [],
+      distance_mi: addr.Distance != null ? Math.round(addr.Distance * 10) / 10
+        : Math.round(haversineMiles(OCM_CENTER.lat, OCM_CENTER.lng, addr.Latitude, addr.Longitude) * 10) / 10
+    };
+  }).filter(Boolean);
+
+  if(rows.length === 0){ showToast('No stations found nearby'); return false; }
+
+  const { error } = await supabase.from('stations').upsert(rows, { onConflict: 'id' });
+  if(error){ console.error(error); showToast('Could not save stations — check console'); return false; }
+  return true;
+}
+
+/* ---------------- Supabase data functions ---------------- */
+async function ensureSignedIn(){
+  try{
+    const { data: { session } } = await supabase.auth.getSession();
+    if(session) return session.user;
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if(error){
+      console.warn('Anonymous sign-in unavailable; using local demo mode.', error);
+      return null;
+    }
+    return data.user;
+  }catch(e){
+    console.warn('Supabase auth unavailable; using local demo mode.', e);
+    return null;
+  }
+}
+
+async function loadProfile(userId){
+  const localProfile = readStoredJSON(STORAGE_KEYS.profile, createLocalProfile());
+  if(!userId){ return localProfile; }
+  try{
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if(error){ console.warn('Profile load failed, using local profile', error); return localProfile; }
+    const merged = { ...localProfile, ...data };
+    persistProfile(merged);
+    return merged;
+  }catch(e){
+    console.warn('Profile load failed, using local profile', e);
+    return localProfile;
+  }
+}
+
+async function loadStations(){
+  const storedStations = readStoredJSON(STORAGE_KEYS.stations, null);
+  if(storedStations && Array.isArray(storedStations) && storedStations.length){
+    stations = storedStations;
+    return;
+  }
+  try{
+    const { data, error } = await supabase.from('stations').select('*');
+    if(error || !data || data.length === 0){
+      console.warn('No remote stations available, using built-in demo stations.');
+      stations = seedFallbackStations();
+      return;
+    }
+    stations = buildStationObjects(data.map(row => ({...row, connectors: row.connectors || [], amenities: row.amenities || []})));
+    persistStations(stations);
+    usingFallbackData = false;
+  }catch(e){
+    console.warn('Station sync failed, using built-in demo stations.', e);
+    stations = seedFallbackStations();
+  }
+}
+
+async function loadReports(stationId){
+  const storedReports = readStoredJSON(STORAGE_KEYS.reports, []);
+  const localOnly = storedReports.filter(r=>r.stationId===stationId);
+  reports = reports.filter(r=>r.stationId!==stationId).concat(localOnly.map(r=>({
+    id:r.id, stationId, user:r.user || 'Scout', type:r.type, text:r.text, time:r.time, up:r.up || 0
+  })));
+
+  try{
+    const { data, error } = await supabase
+      .from('reports')
+      .select('id, type, body, upvotes, created_at, profiles(referral_code)')
+      .eq('station_id', stationId)
+      .order('created_at', { ascending:false });
+    if(error || !data){ return; }
+    const mapped = data.map(r=>({
+      id:r.id, stationId, user: r.profiles ? 'Scout-'+r.profiles.referral_code : 'Scout',
+      type:r.type, text:r.body, time: timeAgo(r.created_at), up:r.upvotes
+    }));
+    reports = reports.filter(r=>r.stationId!==stationId).concat(mapped);
+    persistReports(reports);
+  }catch(e){
+    console.warn('Reports sync failed, using local reports only.', e);
+  }
+}
+
+async function loadMyReportCount(userId){
+  try{
+    const { count } = await supabase.from('reports').select('id', { count:'exact', head:true }).eq('user_id', userId);
+    myReportCount = count || 0;
+  }catch(e){
+    myReportCount = reports.filter(r=>r.userId===userId).length;
+  }
+}
+
+async function loadMyReferralsCount(referralCode){
+  try{
+    const { count } = await supabase.from('profiles').select('id', { count:'exact', head:true }).eq('referred_by', referralCode);
+    myReferralsCount = count || 0;
+  }catch(e){
+    myReferralsCount = 0;
+  }
+}
+
+async function loadLeaderboard(){
+  try{
+    const { data, error } = await supabase.from('profiles').select('referral_code, points').order('points', { ascending:false }).limit(10);
+    if(error || !data){ throw error; }
+    leaderboard = data.map(p => ({ name: (myProfile && p.referral_code===myProfile.referral_code) ? 'You' : 'Scout-'+p.referral_code, pts:p.points }));
+  }catch(e){
+    const localProfile = readStoredJSON(STORAGE_KEYS.profile, createLocalProfile());
+    leaderboard = [{ name: (myProfile && localProfile.referral_code===myProfile.referral_code) ? 'You' : 'Scout-'+localProfile.referral_code, pts: localProfile.points }];
+  }
+}
+
+function timeAgo(iso){
+  const secs = Math.floor((Date.now() - new Date(iso).getTime())/1000);
+  if(secs < 60) return 'just now';
+  if(secs < 3600) return Math.floor(secs/60)+'m ago';
+  if(secs < 86400) return Math.floor(secs/3600)+'h ago';
+  return Math.floor(secs/86400)+'d ago';
+}
+
+/* ---------------- Helpers ---------------- */
+function priceTier(p){
+  if(p == null) return { label:'Unreported', color:'var(--text-mid)', bg:'var(--surface-3)' };
+  if(p < 0.36) return { label:'Cheap', color:'var(--current)', bg:'var(--current-dim)' };
+  if(p < 0.46) return { label:'Moderate', color:'var(--volt)', bg:'var(--volt-dim)' };
+  return { label:'Premium', color:'var(--copper)', bg:'var(--copper-dim)' };
+}
+function formatPrice(p){ return p == null ? '—' : '$'+p.toFixed(2); }
+function currentHourBusy(station){ return station.busy[new Date().getHours()]; }
+function busyColor(val){
+  if(val < 35) return 'var(--current)';
+  if(val < 65) return 'var(--volt)';
+  return 'var(--danger)';
+}
+function renderMeterHTML(percent, color, segments){
+  segments = segments || 10;
+  const filled = Math.round((percent/100)*segments);
+  let html = '';
+  for(let i=0;i<segments;i++){
+    html += `<i style="background:${i < filled ? color : 'var(--surface-3)'}"></i>`;
+  }
+  return html;
+}
+function connectorMatch(connArr, mine){ return mine ? connArr.includes(mine) : null; }
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 2000);
+}
+
+function inferConnectorFromProfile(profile){
+  const make = (profile.make || '').toLowerCase();
+  const model = (profile.model || '').toLowerCase();
+  if (make.includes('tesla') || model.includes('model') || model.includes('cybertruck')) return 'NACS';
+  if (make.includes('nissan') || model.includes('leaf')) return 'J1772';
+  if (make.includes('kia') || make.includes('hyundai') || make.includes('bmw') || make.includes('mercedes') || make.includes('audi') || make.includes('volkswagen') || make.includes('volvo') || make.includes('polestar') || make.includes('chevrolet') || make.includes('ford') || make.includes('porsche') || make.includes('lucid') || make.includes('rivian')) return 'CCS';
+  if (make.includes('toyota') || make.includes('honda') || make.includes('subaru') || make.includes('lexus') || make.includes('acura')) return 'J1772';
+  return '';
+}
+function saveEvProfile(){
+  const make = document.getElementById('evMakeInput').value.trim();
+  const model = document.getElementById('evModelInput').value.trim();
+  const year = document.getElementById('evYearInput').value.trim();
+  evProfile = { make, model, year, connector: inferConnectorFromProfile({ make, model, year }) };
+  try{ localStorage.setItem('chargescout.ev-profile', JSON.stringify(evProfile)); }catch(e){ console.warn('Could not save EV profile', e); }
+  const summary = document.getElementById('evProfileSummary');
+  const connector = evProfile.connector ? `Recommended connector: ${evProfile.connector}` : 'We’ll use general charging suggestions until you add your EV.';
+  summary.textContent = evProfile.make || evProfile.model || evProfile.year ? `${[evProfile.year, evProfile.make, evProfile.model].filter(Boolean).join(' ')} · ${connector}` : 'Add your EV to personalize station suggestions.';
+  showToast('EV profile saved');
+}
+function hydrateEvProfileUI(){
+  document.getElementById('evMakeInput').value = evProfile.make || '';
+  document.getElementById('evModelInput').value = evProfile.model || '';
+  document.getElementById('evYearInput').value = evProfile.year || '';
+  const summary = document.getElementById('evProfileSummary');
+  const connector = evProfile.connector ? `Recommended connector: ${evProfile.connector}` : 'We’ll use general charging suggestions until you add your EV.';
+  summary.textContent = evProfile.make || evProfile.model || evProfile.year ? `${[evProfile.year, evProfile.make, evProfile.model].filter(Boolean).join(' ')} · ${connector}` : 'Add your EV to personalize station suggestions.';
+}
+
+/* ---------------- AI assistant ---------------- */
+let aiMessages = [{ role:'ai', text:'I can help you pick the best charging stop. Ask me for the cheapest station, the best connector fit, or a route-friendly stop.' }];
+function renderAiMessages(){
+  const container = document.getElementById('assistantMsgs');
+  container.innerHTML = aiMessages.map(m => `<div class="assistant-bubble ${m.role === 'user' ? 'user' : 'ai'}">${m.text}</div>`).join('');
+  container.scrollTop = container.scrollHeight;
+}
+function getActiveConnector(){
+  return document.getElementById('mapConnectorFilter').value || document.getElementById('listConnectorFilter').value || '';
+}
+function generateAssistantReply(query){
+  const connector = getActiveConnector() || evProfile.connector || '';
+  const usable = stations.filter(st => !connector || st.connectors.includes(connector));
+  const pool = usable.length ? usable : stations;
+  if(!pool.length){ return 'I’m still gathering stations. Try again in a moment.'; }
+
+  const cheapest = [...pool].sort((a,b)=> (a.price == null ? 999 : a.price) - (b.price == null ? 999 : b.price))[0];
+  const leastBusy = [...pool].sort((a,b)=> currentHourBusy(a) - currentHourBusy(b))[0];
+  const bestFit = [...pool].sort((a,b)=> {
+    const aCost = a.price == null ? 999 : a.price;
+    const bCost = b.price == null ? 999 : b.price;
+    const aScore = aCost + (a.distance || 0) * 0.04 + currentHourBusy(a) * 0.02;
+    const bScore = bCost + (b.distance || 0) * 0.04 + currentHourBusy(b) * 0.02;
+    return aScore - bScore;
+  })[0];
+
+  const lower = query.toLowerCase();
+  if(lower.includes('trip') || lower.includes('route') || lower.includes('road')){
+    const profileText = evProfile.make || evProfile.model ? ` for your ${[evProfile.year, evProfile.make, evProfile.model].filter(Boolean).join(' ')}` : '';
+    return `For a road-trip stop${profileText}, ${bestFit.name} is a strong fit. It is about ${bestFit.distance ?? 0} mi away${connector ? ` and supports ${connector}` : ''}${bestFit.price != null ? ` at $${bestFit.price.toFixed(2)}/kWh` : ''}.`;
+  }
+  if(lower.includes('busy') || lower.includes('crowd') || lower.includes('least')){
+    return `The least busy option right now is ${leastBusy.name}. It is about ${leastBusy.distance ?? 0} mi away and should be a calmer stop${leastBusy.price != null ? ` at $${leastBusy.price.toFixed(2)}/kWh` : ''}.`;
+  }
+  if(lower.includes('connector') || lower.includes('tesla') || lower.includes('ccs') || lower.includes('j1772') || lower.includes('chademo')){
+    const label = connector || 'your selected connector';
+    return `For ${label}${evProfile.make || evProfile.model ? ` on your ${[evProfile.year, evProfile.make, evProfile.model].filter(Boolean).join(' ')}` : ''}, ${bestFit.name} looks like the best match${bestFit.price != null ? ` at $${bestFit.price.toFixed(2)}/kWh` : ''}. It is about ${bestFit.distance ?? 0} mi away.`;
+  }
+  return `The cheapest option${connector ? ` for ${connector}` : ''}${evProfile.make || evProfile.model ? ` for your ${[evProfile.year, evProfile.make, evProfile.model].filter(Boolean).join(' ')}` : ''} looks like ${cheapest.name}${cheapest.price != null ? ` at $${cheapest.price.toFixed(2)}/kWh` : ''}. It is about ${cheapest.distance ?? 0} mi away.`;
+}
+function openAssistantPanel(){
+  document.getElementById('assistantPanel').classList.add('show');
+  document.getElementById('assistantInput').focus();
+}
+function closeAssistantPanel(){
+  document.getElementById('assistantPanel').classList.remove('show');
+}
+function handleAssistantMessage(text){
+  const input = document.getElementById('assistantInput');
+  const query = (text || input.value).trim();
+  if(!query) return;
+  aiMessages.push({ role:'user', text: query });
+  aiMessages.push({ role:'ai', text: generateAssistantReply(query) });
+  renderAiMessages();
+  input.value = '';
+}
+
+document.getElementById('aiBtn').addEventListener('click', openAssistantPanel);
+document.getElementById('assistantCloseBtn').addEventListener('click', closeAssistantPanel);
+document.getElementById('assistantPanel').addEventListener('click', (e)=>{ if(e.target.id === 'assistantPanel') closeAssistantPanel(); });
+document.getElementById('assistantSendBtn').addEventListener('click', ()=> handleAssistantMessage());
+document.getElementById('assistantInput').addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); handleAssistantMessage(); }});
+document.querySelectorAll('.assist-chip').forEach(btn=> btn.addEventListener('click', ()=> handleAssistantMessage(btn.dataset.aiAction === 'cheapest' ? 'Find the cheapest charging station nearby' : btn.dataset.aiAction === 'connector' ? 'Find the best station for my connector' : 'Plan a road-trip charging stop')));
+document.getElementById('saveEvProfileBtn').addEventListener('click', saveEvProfile);
+renderAiMessages();
+hydrateEvProfileUI();
+
+/* ---------------- Tab navigation ---------------- */
+document.querySelector('.bottom-nav').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-view]');
+  if(!btn) return;
+  document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+btn.dataset.view).classList.add('active');
+});
+function goToView(name){
+  document.querySelector(`.bottom-nav button[data-view="${name}"]`).click();
+}
+
+/* ---------------- Map ---------------- */
+function renderMap(){
+  const mine = document.getElementById('mapConnectorFilter').value;
+  const layer = document.getElementById('pinsLayer');
+  layer.innerHTML = '';
+  stations.forEach(st=>{
+    const tier = priceTier(st.price);
+    const match = connectorMatch(st.connectors, mine);
+    const dim = mine && !match;
+    const label = formatPrice(st.price);
+    const w = 15 + label.length*6.5;
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class', 'price-bubble' + (dim ? ' dim':''));
+    g.setAttribute('transform', `translate(${st.x - w/2},${st.y - 12})`);
+    g.innerHTML = `
+      <rect width="${w}" height="24" rx="12" fill="${tier.color}"/>
+      <text x="${w/2}" y="16" font-size="11" fill="#0B0F14" text-anchor="middle">${label}</text>
+    `;
+    g.addEventListener('click', ()=> openStationSheet(st.id));
+    layer.appendChild(g);
+  });
+}
+
+function renderNearby(){
+  const sorted = [...stations].sort((a,b)=>{
+    if(a.price==null && b.price==null) return 0;
+    if(a.price==null) return 1;
+    if(b.price==null) return -1;
+    return a.price-b.price;
+  }).slice(0,5);
+  document.getElementById('nearbyCards').innerHTML = sorted.map(st=>{
+    const tier = priceTier(st.price);
+    return `<div class="ncard" data-open="${st.id}">
+      <div class="nn">${st.name}</div>
+      <div class="nb">${st.network} · ${st.distance} mi</div>
+      <div class="npr" style="color:${tier.color}">${formatPrice(st.price)}${st.price!=null ? '/kWh' : ''}</div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('#nearbyCards [data-open]').forEach(el=>{
+    el.addEventListener('click', ()=> openStationSheet(el.dataset.open));
+  });
+}
+
+document.getElementById('mapConnectorFilter').addEventListener('change', renderMap);
+document.getElementById('refreshStationsBtn').addEventListener('click', async ()=>{
+  showToast('Refreshing from Open Charge Map…');
+  const ok = await syncFromOpenChargeMap();
+  if(ok){
+    await loadStations();
+    renderMap();
+    renderNearby();
+    renderStationList();
+    showToast('Stations updated');
+  }
+});
+document.getElementById('fabReport').addEventListener('click', ()=>{
+  goToView('community');
+  showToast('Pick a station below to report');
+});
+document.getElementById('notifBtn').addEventListener('click', ()=>{
+  showToast('Price drop nearby: Glendora Supercharger now $0.31/kWh');
+});
+document.getElementById('locateBtn').addEventListener('click', async ()=>{
+  if(!('geolocation' in navigator)){
+    showToast('Location services are not available on this device');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition((pos)=>{
+    currentLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    const label = currentLocation ? 'Your location' : 'Loading your region…';
+    document.getElementById('locationPill').innerHTML = `<svg class="icon-inline" viewBox="0 0 24 24"><path d="M12 21s6-6 6-10a6 6 0 1 0-12 0c0 4 6 10 6 10Z"></path><circle cx="12" cy="11" r="2.5"></circle></svg><b>${label}</b><span>· ${stations.length} stations nearby</span>`;
+    stations = stations.map(st=>({ ...st, distance: st.lat != null && st.lng != null ? Math.round(calculateDistanceMiles(currentLocation.lat, currentLocation.lng, st.lat, st.lng) * 10) / 10 : st.distance }));
+    persistStations(stations);
+    renderMap();
+    renderNearby();
+    renderStationList();
+    showToast('Location updated');
+  }, ()=>{
+    showToast('Location access denied — showing the nationwide demo list');
+  }, { enableHighAccuracy: true, timeout: 8000 });
+});
+
+function showInstallBanner(){
+  const banner = document.getElementById('installBanner');
+  if(banner){ banner.hidden = false; }
+}
+function hideInstallBanner(){
+  const banner = document.getElementById('installBanner');
+  if(banner){ banner.hidden = true; }
+}
+async function handleInstallClick(){
+  if(!installPromptEvent){ showToast('Use browser Share → Install app or the address bar install icon'); return; }
+  installPromptEvent.prompt();
+  const { outcome } = await installPromptEvent.userChoice;
+  if(outcome === 'accepted') showToast('Install prompt accepted');
+  installPromptEvent = null;
+  hideInstallBanner();
+}
+document.getElementById('installBtn').addEventListener('click', handleInstallClick);
+document.getElementById('installBannerBtn').addEventListener('click', handleInstallClick);
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  installPromptEvent = e;
+  showInstallBanner();
+});
+window.addEventListener('appinstalled', ()=>{
+  hideInstallBanner();
+  showToast('ChargeScout installed');
+});
+if(window.matchMedia('(display-mode: standalone)').matches){ hideInstallBanner(); }
+
+/* ---------------- Bottom sheet ---------------- */
+function openStationSheet(id){
+  selectedStationId = id;
+  const st = stations.find(s=>s.id===id);
+  const tier = priceTier(st.price);
+  const busyNow = currentHourBusy(st);
+  const mine = document.getElementById('mapConnectorFilter').value || document.getElementById('listConnectorFilter').value;
+
+  document.getElementById('bottomSheet').innerHTML = `
+    <div class="sheet-handle"></div>
+    <div class="sheet-network">${st.network}</div>
+    <h3 class="sheet-name">${st.name}</h3>
+    <div class="sheet-addr">${st.address} · ${st.distance} mi away</div>
+    <div class="sheet-price-line">
+      <span class="amt mono">${formatPrice(st.price)}</span>
+      <span class="unit">${st.price!=null ? '/ kWh' : 'no price reported yet'}</span>
+      <span class="sheet-tier" style="background:${tier.bg}; color:${tier.color}">${tier.label}</span>
+    </div>
+    <div class="sheet-block">
+      <div class="lbl">Busy right now</div>
+      <div class="meter-row">
+        <div class="meter">${renderMeterHTML(busyNow, busyColor(busyNow))}</div>
+        <div class="meter-readout mono">${busyNow}%</div>
+      </div>
+    </div>
+    <div class="sheet-block">
+      <div class="lbl">Connectors</div>
+      <div class="connector-list">
+        ${st.connectors.map(c=>`<span class="connector-pill ${mine && c===mine ? 'match':''}">${c}</span>`).join('')}
+      </div>
+    </div>
+    <div class="sheet-block">
+      <div class="lbl">Amenities</div>
+      <div class="sheet-amenities">${st.amenities.length ? st.amenities.join(' · ') : 'Not reported yet'}</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" id="sheetCommunityBtn">Community reports</button>
+      <button class="btn secondary" id="sheetCloseBtn">Close</button>
+    </div>
+  `;
+  document.getElementById('bottomSheet').classList.add('show');
+  document.getElementById('sheetBackdrop').classList.add('show');
+  document.getElementById('sheetCommunityBtn').addEventListener('click', ()=>{
+    communityStationId = st.id;
+    closeSheet();
+    goToView('community');
+    renderCommunity();
+  });
+  document.getElementById('sheetCloseBtn').addEventListener('click', closeSheet);
+}
+function closeSheet(){
+  document.getElementById('bottomSheet').classList.remove('show');
+  document.getElementById('sheetBackdrop').classList.remove('show');
+}
+document.getElementById('sheetBackdrop').addEventListener('click', closeSheet);
+
+/* ---------------- Stations list ---------------- */
+let currentSort = 'price';
+document.getElementById('sortCtrl').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-sort]');
+  if(!btn) return;
+  document.querySelectorAll('#sortCtrl button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  currentSort = btn.dataset.sort;
+  renderStationList();
+});
+document.getElementById('listConnectorFilter').addEventListener('change', renderStationList);
+
+function renderStationList(){
+  const mine = document.getElementById('listConnectorFilter').value;
+  let list = stations.map(st=>({...st, busyNow: currentHourBusy(st), compatible: connectorMatch(st.connectors, mine)}));
+
+  list.sort((a,b)=>{
+    if(mine && a.compatible !== b.compatible) return a.compatible ? -1 : 1;
+    if(currentSort==='price'){
+      if(a.price==null && b.price==null) return 0;
+      if(a.price==null) return 1;
+      if(b.price==null) return -1;
+      return a.price-b.price;
+    }
+    if(currentSort==='busy') return a.busyNow-b.busyNow;
+    if(currentSort==='distance') return a.distance-b.distance;
+    return 0;
+  });
+
+  document.getElementById('stationList').innerHTML = list.map(st=>{
+    const tier = priceTier(st.price);
+    const incompatible = mine && !st.compatible;
+    return `
+    <div class="srow ${incompatible ? 'incompatible':''}" data-open="${st.id}">
+      <div class="price-badge" style="background:${tier.bg}; color:${tier.color}">
+        <div class="p">${formatPrice(st.price)}</div>
+        <div class="u">${st.price!=null ? '/kWh' : 'no data'}</div>
+      </div>
+      <div class="info">
+        <div class="n">${st.name}</div>
+        <div class="m">${st.network} · ${st.distance} mi${incompatible ? ' · no match':''}</div>
+      </div>
+      <div class="busy-mini">
+        <div class="meter">${renderMeterHTML(st.busyNow, busyColor(st.busyNow), 5)}</div>
+      </div>
+      <div class="chevron">›</div>
+    </div>`;
+  }).join('');
+
+  document.querySelectorAll('#stationList [data-open]').forEach(el=>{
+    el.addEventListener('click', ()=> openStationSheet(el.dataset.open));
+  });
+}
+
+/* ---------------- Community ---------------- */
+function renderStationChips(){
+  document.getElementById('stationChips').innerHTML = stations.map(st=>`
+    <button class="schip ${st.id===communityStationId?'active':''}" data-pick="${st.id}">${st.name.split(' ').slice(0,2).join(' ')}</button>
+  `).join('');
+  document.querySelectorAll('#stationChips [data-pick]').forEach(b=>{
+    b.addEventListener('click', ()=>{ communityStationId = b.dataset.pick; renderCommunity(); });
+  });
+}
+
+document.getElementById('typeBtns').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-type]');
+  if(!btn) return;
+  document.querySelectorAll('#typeBtns button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  activeReportType = btn.dataset.type;
+});
+
+async function renderCommunity(){
+  renderStationChips();
+  if(!communityStationId){
+    document.getElementById('communitySub').textContent = 'No stations loaded yet';
+    document.getElementById('reportFeed').innerHTML = '';
+    return;
+  }
+  const st = stations.find(s=>s.id===communityStationId);
+  document.getElementById('communitySub').textContent = st.name + ' — ' + st.address;
+  await loadReports(communityStationId);
+  const feed = reports.filter(r=>r.stationId===communityStationId);
+  const container = document.getElementById('reportFeed');
+  if(feed.length===0){
+    container.innerHTML = '<div class="report"><div class="report-body" style="color:var(--text-mid)">No reports yet — be the first to post one.</div></div>';
+    return;
+  }
+  container.innerHTML = feed.map(r=>`
+    <div class="report">
+      <div class="report-head">
+        <span class="report-type ${r.type}">${r.type}</span>
+        <strong style="font-size:12.5px">${r.user}</strong>
+        <span class="report-time">${r.time}</span>
+      </div>
+      <div class="report-body">${r.text}</div>
+      <button class="upvote" data-upvote="${r.id}">▲ ${r.up}</button>
+    </div>
+  `).join('');
+  container.querySelectorAll('[data-upvote]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      b.disabled = true;
+      const { error } = await supabase.from('report_upvotes').insert({ report_id:b.dataset.upvote, user_id: myProfile.id });
+      if(error){ showToast('Already upvoted'); b.disabled = false; return; }
+      const rep = reports.find(r=>r.id===b.dataset.upvote);
+      await supabase.from('reports').update({ upvotes: rep.up + 1 }).eq('id', rep.id);
+      renderCommunity();
+    });
+  });
+}
+
+document.getElementById('submitReport').addEventListener('click', async ()=>{
+  const text = document.getElementById('reportText').value.trim();
+  if(!text){ showToast('Add a few words first'); return; }
+  const localReport = {
+    id: 'local-' + Math.random().toString(36).slice(2, 10),
+    stationId: communityStationId,
+    user: 'You',
+    type: activeReportType,
+    text,
+    time: 'just now',
+    up: 0
+  };
+  const storedReports = readStoredJSON(STORAGE_KEYS.reports, []);
+  storedReports.push({ ...localReport, stationId: communityStationId, userId: myProfile.id, createdAt: new Date().toISOString() });
+  persistReports(storedReports);
+  reports = reports.filter(r=>r.stationId!==communityStationId).concat([localReport]);
+  document.getElementById('reportText').value = '';
+  await awardPoints(5, 'Report posted — +5 points');
+  await loadMyReportCount(myProfile.id);
+
+  try{
+    const { error } = await supabase.from('reports').insert({
+      station_id: communityStationId, user_id: myProfile.id, type: activeReportType, body: text
+    });
+    if(error){ console.warn('Remote report sync skipped', error); }
+  }catch(e){ console.warn('Remote report sync skipped', e); }
+
+  if(myProfile.referred_by && !myProfile.referral_bonus_claimed && myReportCount === 1){
+    try{
+      const { data: referrer } = await supabase.from('profiles').select('id, points').eq('referral_code', myProfile.referred_by).single();
+      if(referrer){
+        await supabase.from('profiles').update({ points: referrer.points + 25 }).eq('id', referrer.id);
+        await supabase.from('profiles').update({ referral_bonus_claimed: true }).eq('id', myProfile.id);
+        myProfile.referral_bonus_claimed = true;
+        persistProfile(myProfile);
+      }
+    }catch(e){ console.warn('Referral bonus sync skipped', e); }
+  }
+  renderCommunity();
+  renderRewards();
+});
+
+async function awardPoints(amount, message){
+  youPoints += amount;
+  myProfile.points = youPoints;
+  persistProfile(myProfile);
+  try{
+    await supabase.from('profiles').update({ points: youPoints }).eq('id', myProfile.id);
+  }catch(e){ console.warn('Remote point sync skipped', e); }
+  showToast(message);
+  await loadLeaderboard();
+}
+
+/* ---------------- Rewards ---------------- */
+function currentTier(pts){ let t = tiers[0]; for(const tier of tiers){ if(pts >= tier.min) t = tier; } return t; }
+function nextTier(pts){ return tiers.find(t=>t.min > pts) || null; }
+
+function renderRewards(){
+  const tier = currentTier(youPoints);
+  const next = nextTier(youPoints);
+  document.getElementById('rTierName').textContent = tier.name;
+  document.getElementById('rTierPts').textContent = youPoints;
+  if(next){
+    const span = next.min - tier.min;
+    const progressed = youPoints - tier.min;
+    const pct = Math.min(100, Math.round((progressed/span)*100));
+    document.getElementById('rTierNext').textContent = `${next.min - youPoints} pts to ${next.name}`;
+    document.getElementById('rTierMeter').innerHTML = renderMeterHTML(pct, 'var(--current)', 12);
+  } else {
+    document.getElementById('rTierNext').textContent = 'Top tier reached';
+    document.getElementById('rTierMeter').innerHTML = renderMeterHTML(100, 'var(--current)', 12);
+  }
+  const sorted = [...leaderboard].sort((a,b)=>b.pts-a.pts);
+  document.getElementById('leaderboard').innerHTML = sorted.map((l,i)=>`
+    <div class="board-row ${l.name==='You' ? 'you':''}">
+      <span class="rank">${i+1}</span>
+      <span class="name">${l.name}</span>
+      <span class="bpts">${l.pts} pts</span>
+    </div>
+  `).join('');
+
+  renderBadges();
+  document.getElementById('sweepEntries').textContent = sweepEntries;
+}
+
+function renderBadges(){
+  document.getElementById('badgesGrid').innerHTML = badgeDefs.map(b=>{
+    const unlocked = b.check();
+    return `<div class="badge ${unlocked?'unlocked':''}">
+      <div class="bic">${b.icon}</div>
+      <div class="bname">${b.name}</div>
+      <div class="bdesc">${b.desc}</div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('copyCodeBtn').addEventListener('click', ()=>{
+  const code = document.getElementById('referralCode').textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).then(()=> showToast('Code copied')).catch(()=> showToast('Code: '+code));
+  } else {
+    showToast('Code: '+code);
+  }
+});
+
+document.getElementById('applyCodeBtn').addEventListener('click', async ()=>{
+  const val = document.getElementById('friendCodeInput').value.trim().toUpperCase();
+  if(!val){ showToast('Enter a code first'); return; }
+  if(myProfile.referred_by){ showToast('Welcome bonus already used'); return; }
+  if(val === myProfile.referral_code){ showToast("That's your own code"); return; }
+  try{
+    const { data: referrer, error } = await supabase.from('profiles').select('referral_code').eq('referral_code', val).single();
+    if(error || !referrer){ showToast('Code not found'); return; }
+    await supabase.from('profiles').update({ referred_by: val }).eq('id', myProfile.id);
+  }catch(e){ console.warn('Referral code sync skipped', e); }
+  myProfile.referred_by = val;
+  persistProfile(myProfile);
+  document.getElementById('friendCodeInput').value = '';
+  await awardPoints(5, 'Welcome bonus applied — +5 pts');
+  renderRewards();
+});
+
+document.getElementById('simulateReferralBtn').addEventListener('click', ()=>{
+  showToast('This happens automatically once your friend posts their first report');
+});
+
+document.getElementById('redeemEntryBtn').addEventListener('click', async ()=>{
+  if(youPoints < 50){ showToast('Need 50 pts to redeem'); return; }
+  youPoints -= 50;
+  sweepEntries += 1;
+  myProfile.points = youPoints;
+  myProfile.sweepstakes_entries = sweepEntries;
+  persistProfile(myProfile);
+  try{
+    await supabase.from('profiles').update({ points: youPoints, sweepstakes_entries: sweepEntries }).eq('id', myProfile.id);
+  }catch(e){ console.warn('Sweepstakes sync skipped', e); }
+  showToast('Redeemed — +1 drawing entry');
+  renderRewards();
+});
+
+/* ---------------- Init ---------------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(e=>console.error('SW registration failed', e));
+  });
+}
+
+async function init(){
+  try{
+    const user = await ensureSignedIn();
+    myProfile = await loadProfile(user ? user.id : null);
+    if(!myProfile){ myProfile = createLocalProfile(); persistProfile(myProfile); }
+    youPoints = myProfile.points;
+    sweepEntries = myProfile.sweepstakes_entries || 0;
+    document.getElementById('referralCode').textContent = myProfile.referral_code;
+
+    try{
+      const { count: ocmCount } = await supabase.from('stations').select('id', { count:'exact', head:true }).like('id', 'ocm-%');
+      if(!ocmCount){
+        showToast('Loading nearby stations…');
+        await syncFromOpenChargeMap();
+      }
+    }catch(e){ console.warn('Remote station count check skipped', e); }
+
+    await loadStations();
+    if(stations.length === 0){ stations = seedFallbackStations(); }
+    if(!communityStationId && stations[0]) communityStationId = stations[0].id;
+    await loadMyReportCount(myProfile.id);
+    await loadMyReferralsCount(myProfile.referral_code);
+    await loadLeaderboard();
+
+    document.getElementById('locationPill').innerHTML = `<svg class="icon-inline" viewBox="0 0 24 24"><path d="M12 21s6-6 6-10a6 6 0 1 0-12 0c0 4 6 10 6 10Z"></path><circle cx="12" cy="11" r="2.5"></circle></svg><b>${currentLocation ? 'Your location' : 'Nationwide demo'}</b><span>· ${stations.length} stations nearby</span>`;
+    renderMap();
+    renderNearby();
+    renderStationList();
+    renderCommunity();
+    renderRewards();
+  }catch(e){
+    console.error(e);
+    stations = seedFallbackStations();
+    if(!myProfile){ myProfile = createLocalProfile(); persistProfile(myProfile); }
+    renderMap();
+    renderNearby();
+    renderStationList();
+    renderCommunity();
+    renderRewards();
+    showToast('Using the local demo mode');
+  }
+}
+init();
+</script>
+</body>
+</html>
