@@ -650,7 +650,7 @@
    ============================================================ */
 const SUPABASE_URL = 'https://oyqqqsrbvilsnwfyfjle.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_ImAbf7yxRopTmqKEEtreBA_hQ2OhoIp';
-const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+let supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 const STORAGE_KEYS = {
   profile: 'chargescout.profile',
