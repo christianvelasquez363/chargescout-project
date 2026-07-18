@@ -142,6 +142,13 @@
   .segctrl button{ flex:1; background:none; border:none; color:var(--text-mid); font-size:12px; padding:7px 8px; border-radius:999px; cursor:pointer; }
   .segctrl button.on{ background:var(--current); color:var(--ink); font-weight:600; }
 
+  .quick-actions{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:0 18px 12px; }
+  .quick-action-btn{ width:100%; border:none; padding:10px 10px; border-radius:12px; display:flex; flex-direction:column; align-items:flex-start; gap:3px; font-size:12px; font-weight:700; cursor:pointer; text-align:left; transition:transform .16s ease, box-shadow .16s ease, background .16s ease; }
+  .quick-action-btn .meta{ font-size:10.5px; font-weight:500; opacity:.85; font-family:'IBM Plex Mono',monospace; }
+  .quick-action-btn.primary{ background:linear-gradient(135deg, var(--current), #42f6c9); color:var(--ink); box-shadow:0 10px 22px rgba(36,230,176,0.18); }
+  .quick-action-btn.secondary{ background:var(--surface); color:var(--text-hi); border:1px solid var(--line); }
+  .quick-action-btn:hover{ transform:translateY(-1px); }
+
   /* ---------- Map screen ---------- */
   .map-canvas{ position:relative; margin:0 18px; border-radius:18px; overflow:hidden; background:var(--surface); aspect-ratio:9/12; }
   .map-canvas svg{ width:100%; height:100%; display:block; }
@@ -340,10 +347,12 @@
   }
   .bottom-nav button{
     flex:1; background:none; border:none; color:var(--text-mid); display:flex; flex-direction:column; align-items:center;
-    gap:3px; font-size:10px; padding:4px 0; cursor:pointer; font-family:'Space Grotesk',sans-serif;
+    gap:3px; font-size:10px; padding:6px 0; cursor:pointer; font-family:'Space Grotesk',sans-serif; border-radius:10px;
+    transition:background .16s ease, color .16s ease, transform .16s ease;
   }
   .bottom-nav button svg{ width:22px; height:22px; }
-  .bottom-nav button.active{ color:var(--current); }
+  .bottom-nav button.active{ color:var(--current); background:rgba(36,230,176,0.14); box-shadow:inset 0 0 0 1px rgba(36,230,176,0.16); }
+  .bottom-nav button:hover{ transform:translateY(-1px); }
 
   .toast{
     position:absolute; bottom:96px; left:50%; transform:translateX(-50%) translateY(10px); z-index:60;
@@ -448,6 +457,20 @@
         </select>
         <button class="pill-select" id="refreshStationsBtn" style="cursor:pointer;"><svg class="icon-inline" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"></path><path d="M20 4v4h-4"></path></svg>Refresh stations</button>
       </div>
+      <div class="quick-actions" aria-label="Quick actions">
+        <button class="quick-action-btn primary" id="findBestBtn" type="button">
+          <span>Find best match</span>
+          <span class="meta">Best fit for your EV</span>
+        </button>
+        <button class="quick-action-btn secondary" id="openStationsBtn" type="button">
+          <span>View stations</span>
+          <span class="meta">List + filters</span>
+        </button>
+        <button class="quick-action-btn secondary" id="quickAskAiBtn" type="button">
+          <span>Ask AI</span>
+          <span class="meta">Route + connector help</span>
+        </button>
+      </div>
       <div class="map-canvas">
         <svg viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg">
           <rect x="0" y="0" width="300" height="400" fill="var(--surface)"/>
@@ -467,7 +490,7 @@
         <button class="fab" id="fabReport" title="Quick report"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span></button>
       </div>
       <div class="nearby-strip">
-        <div class="label">Cheapest near you</div>
+        <div class="label">Best value near you</div>
         <div class="nearby-cards" id="nearbyCards"></div>
       </div>
     </div>
@@ -1084,17 +1107,37 @@ renderAiMessages();
 hydrateEvProfileUI();
 
 /* ---------------- Tab navigation ---------------- */
+function activateView(name){
+  const navBtn = document.querySelector(`.bottom-nav button[data-view="${name}"]`);
+  if(!navBtn) return;
+  document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.remove('active'));
+  navBtn.classList.add('active');
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+}
 document.querySelector('.bottom-nav').addEventListener('click', (e)=>{
   const btn = e.target.closest('button[data-view]');
   if(!btn) return;
-  document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById('screen-'+btn.dataset.view).classList.add('active');
+  activateView(btn.dataset.view);
 });
 function goToView(name){
-  document.querySelector(`.bottom-nav button[data-view="${name}"]`).click();
+  activateView(name);
 }
+
+document.getElementById('findBestBtn').addEventListener('click', ()=>{
+  document.getElementById('listConnectorFilter').value = document.getElementById('mapConnectorFilter').value;
+  renderStationList();
+  activateView('stations');
+  showToast('Showing your best matches');
+});
+document.getElementById('openStationsBtn').addEventListener('click', ()=>{
+  activateView('stations');
+  showToast('Filtered station list ready');
+});
+document.getElementById('quickAskAiBtn').addEventListener('click', ()=>{
+  openAssistantPanel();
+  showToast('Ask for route or connector help');
+});
 
 /* ---------------- Map ---------------- */
 function renderMap(){
